@@ -1,0 +1,3 @@
+<resources>
+    <style name="Theme.FamilyMap" parent="Theme.MaterialComponents.DayNight.NoActionBar" />
+</resources>

@@ -1,0 +1,143 @@
+package com.ishhf.familymap
+
+import android.Manifest
+import android.content.Intent
+import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
+import android.widget.Button
+import android.widget.Switch
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.OnMapReadyCallback
+import com.google.android.gms.maps.SupportMapFragment
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.Marker
+import com.google.android.gms.maps.model.MarkerOptions
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+
+class MapActivity : AppCompatActivity(), OnMapReadyCallback {
+
+    private lateinit var map: GoogleMap
+    private lateinit var prefs: SharedPreferences
+    private val db = FirebaseFirestore.getInstance()
+    private val markers = HashMap<String, Marker>()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_map)
+        prefs = getSharedPreferences("family_map_prefs", MODE_PRIVATE)
+
+        val mapFragment = supportFragmentManager.findFragmentById(R.id.map) as SupportMapFragment
+        mapFragment.getMapAsync(this)
+
+        val shareSwitch = findViewById<Switch>(R.id.shareSwitch)
+        shareSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) enableSharing() else disableSharing()
+        }
+
+        findViewById<Button>(R.id.btnChat).setOnClickListener {
+            startActivity(Intent(this, ChatActivity::class.java))
+        }
+
+        findViewById<Button>(R.id.btnMembers).setOnClickListener {
+            startActivity(Intent(this, MembersActivity::class.java))
+        }
+
+        requestLocationPermissions()
+        listenToFamilyLocations()
+    }
+
+    override fun onMapReady(googleMap: GoogleMap) {
+        map = googleMap
+    }
+
+    private fun myUsername(): String? = prefs.getString("my_username", null)
+
+    private fun requestLocationPermissions() {
+        val fineGranted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!fineGranted) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                10
+            )
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 11)
+        }
+    }
+
+    private fun requestBackgroundLocationIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val granted = ContextCompat.checkSelfPermission(
+                this, Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION), 12)
+            }
+        }
+    }
+
+    private fun enableSharing() {
+        val fineGranted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!fineGranted) {
+            Toast.makeText(this, "لازم توافق على صلاحية الموقع أولاً", Toast.LENGTH_LONG).show()
+            requestLocationPermissions()
+            return
+        }
+        requestBackgroundLocationIfNeeded()
+        val username = myUsername() ?: return
+        db.collection("users").document(username).set(mapOf("sharing" to true), SetOptions.merge())
+        ContextCompat.startForegroundService(this, Intent(this, LocationService::class.java))
+        Toast.makeText(this, "تم تفعيل مشاركة موقعك 📍", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun disableSharing() {
+        val username = myUsername() ?: return
+        db.collection("users").document(username).set(mapOf("sharing" to false), SetOptions.merge())
+        stopService(Intent(this, LocationService::class.java))
+        Toast.makeText(this, "تم إيقاف مشاركة موقعك", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun listenToFamilyLocations() {
+        db.collection("users").addSnapshotListener { snapshots, error ->
+            if (error != null || snapshots == null) return@addSnapshotListener
+            if (!::map.isInitialized) return@addSnapshotListener
+
+            for (change in snapshots.documentChanges) {
+                val doc = change.document
+                val uid = doc.id
+                val name = doc.getString("name") ?: "بدون اسم"
+                val sharing = doc.getBoolean("sharing") ?: false
+                val lat = doc.getDouble("lat")
+                val lng = doc.getDouble("lng")
+
+                if (!sharing || lat == null || lng == null) {
+                    markers[uid]?.remove()
+                    markers.remove(uid)
+                    continue
+                }
+
+                val pos = LatLng(lat, lng)
+                val existing = markers[uid]
+                if (existing != null) {
+                    existing.position = pos
+                    existing.title = name
+                } else {
+                    val marker = map.addMarker(MarkerOptions().position(pos).title(name))
+                    if (marker != null) markers[uid] = marker
+                }
+            }
+        }
+    }
+}
