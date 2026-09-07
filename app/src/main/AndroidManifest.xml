@@ -16,11 +16,6 @@
         android:theme="@style/Theme.FamilyMap"
         android:supportsRtl="true">
 
-        <!-- استبدل القيمة هون بمفتاح Google Maps تبعك -->
-        <meta-data
-            android:name="com.google.android.geo.API_KEY"
-            android:value="ضع_مفتاح_خرائط_جوجل_هون" />
-
         <activity
             android:name=".MainActivity"
             android:exported="true">

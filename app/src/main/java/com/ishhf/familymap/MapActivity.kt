@@ -12,29 +12,36 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.google.android.gms.maps.GoogleMap
-import com.google.android.gms.maps.OnMapReadyCallback
-import com.google.android.gms.maps.SupportMapFragment
-import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.Marker
-import com.google.android.gms.maps.model.MarkerOptions
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import org.osmdroid.config.Configuration
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
+import java.io.File
 
-class MapActivity : AppCompatActivity(), OnMapReadyCallback {
+class MapActivity : AppCompatActivity() {
 
-    private lateinit var map: GoogleMap
+    private lateinit var mapView: MapView
     private lateinit var prefs: SharedPreferences
     private val db = FirebaseFirestore.getInstance()
     private val markers = HashMap<String, Marker>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        Configuration.getInstance().osmdroidBasePath = File(getExternalFilesDir(null), "osmdroid")
+        Configuration.getInstance().osmdroidTileCache = File(Configuration.getInstance().osmdroidBasePath, "tiles")
+        Configuration.getInstance().userAgentValue = packageName
+
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_map)
         prefs = getSharedPreferences("family_map_prefs", MODE_PRIVATE)
 
-        val mapFragment = supportFragmentManager.findFragmentById(R.id.map) as SupportMapFragment
-        mapFragment.getMapAsync(this)
+        mapView = findViewById(R.id.map)
+        mapView.setTileSource(TileSourceFactory.MAPNIK)
+        mapView.setMultiTouchControls(true)
+        mapView.controller.setZoom(6.0)
+        mapView.controller.setCenter(GeoPoint(24.7136, 46.6753))
 
         val shareSwitch = findViewById<Switch>(R.id.shareSwitch)
         shareSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -53,8 +60,14 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback {
         listenToFamilyLocations()
     }
 
-    override fun onMapReady(googleMap: GoogleMap) {
-        map = googleMap
+    override fun onResume() {
+        super.onResume()
+        mapView.onResume()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        mapView.onPause()
     }
 
     private fun myUsername(): String? = prefs.getString("my_username", null)
@@ -112,7 +125,6 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback {
     private fun listenToFamilyLocations() {
         db.collection("users").addSnapshotListener { snapshots, error ->
             if (error != null || snapshots == null) return@addSnapshotListener
-            if (!::map.isInitialized) return@addSnapshotListener
 
             for (change in snapshots.documentChanges) {
                 val doc = change.document
@@ -123,20 +135,25 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback {
                 val lng = doc.getDouble("lng")
 
                 if (!sharing || lat == null || lng == null) {
-                    markers[uid]?.remove()
+                    markers[uid]?.let { mapView.overlays.remove(it) }
                     markers.remove(uid)
+                    mapView.invalidate()
                     continue
                 }
 
-                val pos = LatLng(lat, lng)
+                val pos = GeoPoint(lat, lng)
                 val existing = markers[uid]
                 if (existing != null) {
                     existing.position = pos
                     existing.title = name
                 } else {
-                    val marker = map.addMarker(MarkerOptions().position(pos).title(name))
-                    if (marker != null) markers[uid] = marker
+                    val marker = Marker(mapView)
+                    marker.position = pos
+                    marker.title = name
+                    mapView.overlays.add(marker)
+                    markers[uid] = marker
                 }
+                mapView.invalidate()
             }
         }
     }
