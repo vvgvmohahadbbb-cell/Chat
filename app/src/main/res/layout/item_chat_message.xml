@@ -17,7 +17,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textColor="#4CAF50"
+            android:textColor="@color/accent"
             android:textStyle="bold"
             android:textSize="13sp" />
 
@@ -37,6 +37,13 @@
         android:textColor="#FFFFFF"
         android:textSize="15sp"
         android:layout_marginTop="4dp" />
+
+    <Button
+        android:id="@+id/audioButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:visibility="gone" />
 
     <ImageView
         android:id="@+id/messageImage"

@@ -21,6 +21,7 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import java.io.File
 
+/** خريطة العائلة عبر OpenStreetMap (osmdroid) - مجانية بالكامل بدون مفتاح API */
 class MapActivity : AppCompatActivity() {
 
     private lateinit var mapView: MapView
@@ -44,6 +45,9 @@ class MapActivity : AppCompatActivity() {
         mapView.controller.setCenter(GeoPoint(24.7136, 46.6753))
 
         val shareSwitch = findViewById<Switch>(R.id.shareSwitch)
+        // نعيد ضبط حالة المفتاح متل ما كانت آخر مرة، قبل ما نعلّق المستمع
+        // عشان ما تنرجع الشاشة تبين "موقف" وهي فعلياً شغالة بالخلفية
+        shareSwitch.isChecked = prefs.getBoolean("sharing_enabled", false)
         shareSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) enableSharing() else disableSharing()
         }
@@ -58,6 +62,7 @@ class MapActivity : AppCompatActivity() {
 
         requestLocationPermissions()
         listenToFamilyLocations()
+        ContextCompat.startForegroundService(this, Intent(this, ChatNotificationService::class.java))
     }
 
     override fun onResume() {
@@ -112,6 +117,7 @@ class MapActivity : AppCompatActivity() {
         val username = myUsername() ?: return
         db.collection("users").document(username).set(mapOf("sharing" to true), SetOptions.merge())
         ContextCompat.startForegroundService(this, Intent(this, LocationService::class.java))
+        prefs.edit().putBoolean("sharing_enabled", true).apply()
         Toast.makeText(this, "تم تفعيل مشاركة موقعك 📍", Toast.LENGTH_SHORT).show()
     }
 
@@ -119,6 +125,7 @@ class MapActivity : AppCompatActivity() {
         val username = myUsername() ?: return
         db.collection("users").document(username).set(mapOf("sharing" to false), SetOptions.merge())
         stopService(Intent(this, LocationService::class.java))
+        prefs.edit().putBoolean("sharing_enabled", false).apply()
         Toast.makeText(this, "تم إيقاف مشاركة موقعك", Toast.LENGTH_SHORT).show()
     }
 
