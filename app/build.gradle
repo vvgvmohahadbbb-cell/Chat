@@ -44,6 +44,7 @@ dependencies {
     implementation "com.google.firebase:firebase-firestore-ktx"
 
     implementation "org.osmdroid:osmdroid-android:6.1.18"
+    implementation "com.google.android.gms:play-services-location:21.2.0"
 }
 
 apply plugin: 'com.google.gms.google-services'
